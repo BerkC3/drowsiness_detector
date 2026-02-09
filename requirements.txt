@@ -1,0 +1,17 @@
+# Real-Time Driver Drowsiness Detection System
+#
+# NOTE: dlib-bin provides pre-compiled wheels so no C++ compiler is needed.
+#       If dlib-bin fails for your Python version, install the .whl manually:
+#       https://github.com/eddiehe99/dlib-whl
+#
+# NOTE: For GPU training with CUDA, install PyTorch separately FIRST:
+#       pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+#       Then install the rest:  pip install -r requirements.txt
+
+numpy
+scipy
+opencv-python
+dlib-bin
+imutils
+torch
+torchvision

@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+
+# Dlib model (~100MB)
+shape_predictor_68_face_landmarks.dat
+
+# Trained model weights
+drowsiness_model.pth
+
+# Training dataset
+dataset/
+
+# Debug output
+debug_snapshot.png
