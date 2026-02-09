@@ -24,6 +24,19 @@ class Config:
     IMG_SIZE: tuple = (24, 24)
     EYE_CONFIDENCE_THRESHOLD: float = 0.5
 
+    # Head pose
+    HEAD_PITCH_THRESHOLD: float = -15.0  # degrees, negative = head dropping forward
+    HEAD_DROP_CONSEC_FRAMES: int = 30
+    HEAD_POSE_LINE_COLOR: tuple = (255, 0, 0)
+    HEAD_DROP_ALERT_COLOR: tuple = (0, 0, 255)
+
+    # Sound alerts (frequency_hz, duration_ms)
+    SOUND_ENABLED: bool = True
+    ALERT_SOUND_COOLDOWN: float = 1.5  # seconds between beeps
+    DROWSY_BEEP: tuple = (1000, 400)
+    YAWN_BEEP: tuple = (600, 300)
+    HEAD_DROP_BEEP: tuple = (1200, 400)
+
     CAMERA_INDEX: int = 0
     MAX_FAILED_FRAMES: int = 30
 

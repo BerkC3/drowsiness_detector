@@ -1,5 +1,13 @@
+import time
+import threading
+
 import cv2
 import numpy as np
+
+try:
+    import winsound
+except ImportError:
+    winsound = None
 
 from config import Config
 from face_processor import FaceProcessor
@@ -17,7 +25,9 @@ class DriverMonitor:
         self._cap: cv2.VideoCapture | None = None
         self._frame_counter: int = 0
         self._yawn_counter: int = 0
+        self._head_drop_counter: int = 0
         self._failed_reads: int = 0
+        self._last_beep_time: float = 0.0
 
     def start(self) -> None:
         self._cap = cv2.VideoCapture(self._cfg.CAMERA_INDEX)
@@ -53,6 +63,7 @@ class DriverMonitor:
         if len(faces) == 0:
             self._frame_counter = 0
             self._yawn_counter = 0
+            self._head_drop_counter = 0
             self._draw_no_face_warning(frame)
             return frame
 
@@ -87,9 +98,24 @@ class DriverMonitor:
         mar = FaceProcessor.compute_mar(inner_mouth)
         is_yawning = self._update_yawn_state(mar)
 
+        # head pose
+        pitch, yaw, roll, nose_line = self._face_processor.estimate_head_pose(
+            landmarks, frame.shape,
+        )
+        is_head_drop = self._update_head_drop_state(pitch)
+
+        # sound alerts (priority: drowsy > head drop > yawn)
+        if is_drowsy:
+            self._play_alert_sound(*self._cfg.DROWSY_BEEP)
+        elif is_head_drop:
+            self._play_alert_sound(*self._cfg.HEAD_DROP_BEEP)
+        elif is_yawning:
+            self._play_alert_sound(*self._cfg.YAWN_BEEP)
+
         self._draw_overlays(
             frame, avg_conf, left_eye, right_eye, is_drowsy,
             mar, mouth, is_yawning,
+            pitch, nose_line, is_head_drop,
         )
         return frame
 
@@ -138,17 +164,38 @@ class DriverMonitor:
             self._yawn_counter = 0
         return self._yawn_counter >= self._cfg.YAWN_CONSEC_FRAMES
 
+    def _update_head_drop_state(self, pitch: float) -> bool:
+        if pitch < self._cfg.HEAD_PITCH_THRESHOLD:
+            self._head_drop_counter += 1
+        else:
+            self._head_drop_counter = 0
+        return self._head_drop_counter >= self._cfg.HEAD_DROP_CONSEC_FRAMES
+
+    def _play_alert_sound(self, freq: int, duration: int) -> None:
+        if winsound is None or not self._cfg.SOUND_ENABLED:
+            return
+        now = time.time()
+        if now - self._last_beep_time < self._cfg.ALERT_SOUND_COOLDOWN:
+            return
+        self._last_beep_time = now
+        threading.Thread(target=winsound.Beep, args=(freq, duration), daemon=True).start()
+
     # -- drawing helpers --
 
     def _draw_overlays(
         self, frame, eye_conf, left_eye, right_eye, is_drowsy,
         mar=0.0, mouth=None, is_yawning=False,
+        pitch=0.0, nose_line=None, is_head_drop=False,
     ) -> None:
         cv2.drawContours(frame, [cv2.convexHull(left_eye)], -1, self._cfg.EYE_CONTOUR_COLOR, 1)
         cv2.drawContours(frame, [cv2.convexHull(right_eye)], -1, self._cfg.EYE_CONTOUR_COLOR, 1)
 
         if mouth is not None:
             cv2.drawContours(frame, [cv2.convexHull(mouth)], -1, self._cfg.MOUTH_CONTOUR_COLOR, 1)
+
+        # nose direction line
+        if nose_line is not None:
+            cv2.line(frame, nose_line[0], nose_line[1], self._cfg.HEAD_POSE_LINE_COLOR, 2)
 
         if eye_conf < 0:
             eye_text = "Eye: N/A"
@@ -162,8 +209,14 @@ class DriverMonitor:
         cv2.putText(frame, f"MAR: {mar:.2f}", (10, 60),
                     cv2.FONT_HERSHEY_SIMPLEX, self._cfg.FONT_SCALE_EAR,
                     self._cfg.MAR_TEXT_COLOR, self._cfg.FONT_THICKNESS)
+        cv2.putText(frame, f"Pitch: {pitch:.1f}", (10, 90),
+                    cv2.FONT_HERSHEY_SIMPLEX, self._cfg.FONT_SCALE_EAR,
+                    self._cfg.EAR_TEXT_COLOR, self._cfg.FONT_THICKNESS)
 
         h, w = frame.shape[:2]
+        if is_head_drop:
+            self._put_centered_text(frame, "HEAD DROP ALERT!", w, h - 110,
+                                    self._cfg.HEAD_DROP_ALERT_COLOR)
         if is_yawning:
             self._put_centered_text(frame, "YAWNING ALERT!", w, h - 70,
                                     self._cfg.YAWN_ALERT_TEXT_COLOR)

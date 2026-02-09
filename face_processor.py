@@ -20,6 +20,17 @@ class FaceProcessor:
 
     _MIN_ROI_DIM = 8
 
+    # 3D reference points for solvePnP (generic face proportions)
+    _FACE_3D = np.array([
+        (0.0, 0.0, 0.0),            # nose tip
+        (0.0, -330.0, -65.0),       # chin
+        (-225.0, 170.0, -135.0),    # left eye corner
+        (225.0, 170.0, -135.0),     # right eye corner
+        (-150.0, -150.0, -125.0),   # left mouth corner
+        (150.0, -150.0, -125.0),    # right mouth corner
+    ], dtype=np.float64)
+    _POSE_IDX = [30, 8, 36, 45, 48, 54]  # matching landmark indices
+
     def __init__(self, predictor_path: str, model_path: str, img_size: tuple = (24, 24)) -> None:
         if not os.path.isfile(predictor_path):
             raise FileNotFoundError(
@@ -91,6 +102,31 @@ class FaceProcessor:
             return float(prob.item())
         except Exception:
             return -1.0
+
+    def estimate_head_pose(self, landmarks: np.ndarray, frame_shape: tuple):
+        """Pitch/yaw/roll via solvePnP. Also returns a nose direction line for drawing."""
+        pts_2d = landmarks[self._POSE_IDX].astype(np.float64)
+
+        h, w = frame_shape[:2]
+        focal = float(w)
+        cam = np.array([[focal, 0, w / 2], [0, focal, h / 2], [0, 0, 1]], dtype=np.float64)
+        dist_coeffs = np.zeros((4, 1))
+
+        ok, rvec, tvec = cv2.solvePnP(self._FACE_3D, pts_2d, cam, dist_coeffs)
+        if not ok:
+            return 0.0, 0.0, 0.0, None
+
+        rmat, _ = cv2.Rodrigues(rvec)
+        angles, _, _, _, _, _ = cv2.RQDecomp3x3(rmat)
+        pitch, yaw, roll = float(angles[0]), float(angles[1]), float(angles[2])
+
+        # project a point in front of the nose for a direction indicator
+        nose_end_3d = np.array([(0.0, 0.0, 500.0)], dtype=np.float64)
+        nose_end_2d, _ = cv2.projectPoints(nose_end_3d, rvec, tvec, cam, dist_coeffs)
+        p1 = (int(landmarks[30][0]), int(landmarks[30][1]))
+        p2 = (int(nose_end_2d[0][0][0]), int(nose_end_2d[0][0][1]))
+
+        return pitch, yaw, roll, (p1, p2)
 
     def detect_faces(self, gray_frame: np.ndarray):
         return self._detector(gray_frame, 0)

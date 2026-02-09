@@ -9,9 +9,10 @@ A real-time drowsiness and yawn detection system using a webcam. Combines **dlib
 ## How It Works
 
 1. **Face detection** — dlib's HOG-based frontal face detector finds the largest face in frame.
-2. **Landmark prediction** — 68-point shape predictor locates eyes and mouth.
+2. **Landmark prediction** — 68-point shape predictor locates eyes, mouth, and key facial points.
 3. **Eye-state (CNN)** — Square crops around each eye are preprocessed (CLAHE + normalize) and fed into a small CNN that outputs open/closed confidence. If both eyes stay closed for enough consecutive frames, a **drowsiness alert** triggers.
-4. **Yawn detection (MAR)** — Inner mouth landmarks are used to compute the Mouth Aspect Ratio. Sustained high MAR triggers a **yawning alert**.
+4. **Yawn detection (MAR)** — Inner mouth landmarks compute the Mouth Aspect Ratio. Sustained high MAR triggers a **yawning alert**.
+5. **Head pose estimation** — 6 facial landmarks are matched against a 3D face model via `cv2.solvePnP` to extract pitch/yaw/roll angles. If the head drops forward (negative pitch) for too long, a **head drop alert** triggers. A nose direction line is drawn for visual feedback.
 
 ## Project Structure
 
@@ -104,6 +105,8 @@ All parameters live in `config.py`:
 | `CONSEC_FRAMES` | 48 | Frames both eyes must be closed to trigger alert |
 | `MAR_THRESHOLD` | 0.45 | MAR above this = "yawning" |
 | `YAWN_CONSEC_FRAMES` | 20 | Frames mouth must be open to trigger alert |
+| `HEAD_PITCH_THRESHOLD` | -15.0 | Pitch below this (degrees) = head dropping |
+| `HEAD_DROP_CONSEC_FRAMES` | 30 | Frames head must be dropped to trigger alert |
 | `CAMERA_INDEX` | 0 | Webcam index |
 
 ## Debugging
@@ -118,6 +121,7 @@ Opens separate windows showing raw eye ROIs, preprocessed 24x24 crops, and model
 
 - The CNN uses CLAHE preprocessing to handle varying lighting and reduce glare from glasses.
 - Eye ROIs are cropped as squares (1.8x eye width) to keep a consistent aspect ratio regardless of eye state.
+- Head pose uses `cv2.solvePnP` with 6 key landmarks (nose, chin, eye corners, mouth corners) mapped to a generic 3D face model. A blue nose direction line shows where the head is pointing.
 - Inference runs on CPU by design — for a single 24x24 image, CPU is faster than GPU due to transfer overhead.
 
 ## License
