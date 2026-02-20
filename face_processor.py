@@ -120,6 +120,12 @@ class FaceProcessor:
         angles, _, _, _, _, _ = cv2.RQDecomp3x3(rmat)
         pitch, yaw, roll = float(angles[0]), float(angles[1]), float(angles[2])
 
+        # RQDecomp3x3 wraps around ±180 for frontal faces; normalize to [-90, 90]
+        if pitch < -90:
+            pitch += 180.0
+        elif pitch > 90:
+            pitch -= 180.0
+
         # project a point in front of the nose for a direction indicator
         nose_end_3d = np.array([(0.0, 0.0, 500.0)], dtype=np.float64)
         nose_end_2d, _ = cv2.projectPoints(nose_end_3d, rvec, tvec, cam, dist_coeffs)

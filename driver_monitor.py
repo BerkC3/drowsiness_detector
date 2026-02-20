@@ -1,3 +1,4 @@
+import os
 import time
 import threading
 
@@ -29,10 +30,21 @@ class DriverMonitor:
         self._failed_reads: int = 0
         self._last_beep_time: float = 0.0
 
-    def start(self) -> None:
-        self._cap = cv2.VideoCapture(self._cfg.CAMERA_INDEX)
+    _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
+
+    def start(self, source=None) -> None:
+        if source is None:
+            source = self._cfg.CAMERA_INDEX
+
+        if isinstance(source, str):
+            ext = os.path.splitext(source)[1].lower()
+            if ext in self._IMAGE_EXTENSIONS:
+                self._run_on_image(source)
+                return
+
+        self._cap = cv2.VideoCapture(source)
         if not self._cap.isOpened():
-            print(f"[ERROR] Cannot open camera index {self._cfg.CAMERA_INDEX}")
+            print(f"[ERROR] Cannot open source: {source}")
             return
 
         print("[INFO] Drowsiness detection started. Press 'q' to quit.")
@@ -55,6 +67,18 @@ class DriverMonitor:
                     break
         finally:
             self._cleanup()
+
+    def _run_on_image(self, path: str) -> None:
+        frame = cv2.imread(path)
+        if frame is None:
+            print(f"[ERROR] Cannot read image: {path}")
+            return
+
+        print("[INFO] Image detection running. Press any key to close.")
+        processed = self._process_frame(frame)
+        cv2.imshow(self._cfg.WINDOW_NAME, processed)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
     def _process_frame(self, frame: np.ndarray) -> np.ndarray:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -203,13 +227,21 @@ class DriverMonitor:
             state = "Open" if eye_conf >= self._cfg.EYE_CONFIDENCE_THRESHOLD else "Closed"
             eye_text = f"Eye: {state} ({eye_conf:.2f})"
 
+        yawn_state = "Yawning" if mar > self._cfg.MAR_THRESHOLD else "Normal"
+        mouth_text = f"Mouth: {yawn_state} ({mar:.2f})"
+        head_text = f"Head Angle: {pitch:.1f} deg"
+
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (5, 8), (310, 105), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
+
         cv2.putText(frame, eye_text, (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, self._cfg.FONT_SCALE_EAR,
                     self._cfg.EAR_TEXT_COLOR, self._cfg.FONT_THICKNESS)
-        cv2.putText(frame, f"MAR: {mar:.2f}", (10, 60),
+        cv2.putText(frame, mouth_text, (10, 60),
                     cv2.FONT_HERSHEY_SIMPLEX, self._cfg.FONT_SCALE_EAR,
                     self._cfg.MAR_TEXT_COLOR, self._cfg.FONT_THICKNESS)
-        cv2.putText(frame, f"Pitch: {pitch:.1f}", (10, 90),
+        cv2.putText(frame, head_text, (10, 90),
                     cv2.FONT_HERSHEY_SIMPLEX, self._cfg.FONT_SCALE_EAR,
                     self._cfg.EAR_TEXT_COLOR, self._cfg.FONT_THICKNESS)
 
